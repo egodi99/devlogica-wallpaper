@@ -1,6 +1,6 @@
 //! Icona nella barra di sistema (Windows) / barra dei menu (macOS) con tutte le impostazioni.
 
-use crate::config::{Config, Mode};
+use crate::config::{Config, Mode, Quality};
 use crate::wallpapers::Wallpaper;
 use std::collections::HashMap;
 use tray_icon::menu::{CheckMenuItem, Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
@@ -11,6 +11,7 @@ pub enum Action {
     SetWallpaper(String),
     SetMonitorWallpaper { monitor: String, wallpaper: String },
     SetFps(u32),
+    SetQuality(Quality),
     ToggleLogo,
     TogglePause,
     #[cfg_attr(not(windows), allow(dead_code))]
@@ -82,6 +83,16 @@ pub fn build(cfg: &Config, catalog: &[Wallpaper], monitors: &[MonitorInfo], auto
         let _ = fps.append(&check(label, cfg.fps() == n, Action::SetFps(n)));
     }
     let _ = menu.append(&fps);
+
+    let quality = Submenu::new("Risoluzione", true);
+    for (q, label) in [
+        (Quality::Auto, "Automatica — consigliata"),
+        (Quality::Full, "Piena"),
+        (Quality::Low, "Ridotta — memoria minima"),
+    ] {
+        let _ = quality.append(&check(label, cfg.quality == q, Action::SetQuality(q)));
+    }
+    let _ = menu.append(&quality);
 
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&check("Mostra il logo", cfg.show_logo, Action::ToggleLogo));

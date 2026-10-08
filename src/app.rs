@@ -152,10 +152,13 @@ impl App {
                 }
             }
         }
-        let gpu = self.gpu.as_ref().unwrap();
+        let gpu = self.gpu.as_mut().unwrap();
+        let in_use: Vec<String> = created.iter().map(|c| c.2.clone()).collect();
+        gpu.retain_pipelines(&in_use);
         for (window, surface, wallpaper, offset, canvas) in created {
             let id = window.id();
-            let target = gpu.make_target(window, surface);
+            let scale = self.cfg.quality.scale(window.inner_size().height);
+            let target = gpu.make_target(window, surface, scale);
             self.screens.insert(id, Screen { target, wallpaper, offset, canvas, occluded: false });
         }
         self.changed = Instant::now();
@@ -199,7 +202,8 @@ impl App {
                 time,
                 since,
                 logo_on: logo,
-                _pad: [0.0; 3],
+                scale: screen.target.scale,
+                _pad: [0.0; 2],
             };
             let w = self.catalog.iter().find(|w| w.id == screen.wallpaper).unwrap_or(&self.catalog[0]);
             gpu.draw(&mut screen.target, w, params);
@@ -222,6 +226,10 @@ impl App {
                 rebuild = true;
             }
             Action::SetFps(n) => self.cfg.fps = n,
+            Action::SetQuality(q) => {
+                self.cfg.quality = q;
+                rebuild = true;
+            }
             Action::ToggleLogo => self.cfg.show_logo = !self.cfg.show_logo,
             Action::TogglePause => self.cfg.paused = !self.cfg.paused,
             Action::ToggleFullscreenPause => self.cfg.pause_on_fullscreen = !self.cfg.pause_on_fullscreen,

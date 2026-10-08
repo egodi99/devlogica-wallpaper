@@ -1,5 +1,5 @@
 //! Esportazione di immagini statiche, senza finestre:
-//!   devlogica-wallpaper --snapshot <sfondo> <larghezza> <altezza> <secondi> <file.png> [--no-logo] [--tile x y w h]
+//!   devlogica-wallpaper --snapshot <sfondo> <larghezza> <altezza> <secondi> <file.png> [--no-logo] [--tile x y w h] [--scale s]
 //! Con --tile si disegna solo una porzione della tela, come fa uno schermo in modalità estesa.
 
 use crate::render::{self, Gpu, Params};
@@ -40,12 +40,14 @@ pub fn run(args: &[String]) -> i32 {
         time: t,
         since: 60.0,
         logo_on: if logo { 1.0 } else { 0.0 },
-        _pad: [0.0; 3],
+        scale: args.iter().position(|a| a == "--scale").and_then(|i| args.get(i + 1)).and_then(|s| s.parse().ok()).unwrap_or(1.0),
+        _pad: [0.0; 2],
     };
     let Some(px) = gpu.render_offscreen(w, params) else {
         eprintln!("rendering non riuscito (errore nello shader?)");
         return 1;
     };
+    let (width, height) = ((width as f32 * params.scale).round() as u32, (height as f32 * params.scale).round() as u32);
     match image::save_buffer(&args[4], &px, width, height, image::ExtendedColorType::Rgba8) {
         Ok(()) => 0,
         Err(e) => {

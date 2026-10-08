@@ -22,7 +22,9 @@ pub struct Params {
     /// Secondi dall'ultimo cambio di sfondo (per l'animazione di apertura).
     pub since: f32,
     pub logo_on: f32,
-    pub _pad: [f32; 3],
+    /// Rapporto tra pixel disegnati e pixel della finestra (1 = risoluzione piena).
+    pub scale: f32,
+    pub _pad: [f32; 2],
 }
 
 pub struct Gpu {
@@ -39,6 +41,7 @@ pub struct Gpu {
 }
 
 pub struct Target {
+    pub scale: f32,
     pub window: Arc<Window>,
     pub surface: wgpu::Surface<'static>,
     pub config: wgpu::SurfaceConfiguration,
@@ -47,9 +50,19 @@ pub struct Target {
 }
 
 pub fn new_instance() -> wgpu::Instance {
-    // Vulkan / DirectX 12 / Metal: nessun "display handle" necessario.
+    // Un solo backend per sistema (DirectX 12 / Metal): non serve il "display handle".
     let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
-    desc.backends = wgpu::Backends::PRIMARY;
+    desc.backends = if cfg!(windows) {
+        wgpu::Backends::DX12
+    } else if cfg!(target_os = "macos") {
+        wgpu::Backends::METAL
+    } else {
+        wgpu::Backends::VULKAN
+    };
+    // Nelle build di rilascio nessun livello di validazione o debug, che occupa memoria.
+    if !cfg!(debug_assertions) {
+        desc.flags = wgpu::InstanceFlags::empty();
+    }
     wgpu::Instance::new(desc)
 }
 
@@ -69,6 +82,9 @@ impl Gpu {
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("devlogica"),
             required_limits: wgpu::Limits::downlevel_defaults().using_resolution(adapter.limits()),
+            // Blocchi di memoria piccoli: le nostre risorse sono minuscole, non serve riservare
+            // i grandi blocchi pensati per i giochi.
+            memory_hints: wgpu::MemoryHints::Manual { suballocated_device_memory_block_size: (256 << 10)..(4 << 20) },
             ..Default::default()
         }))
         .map_err(|e| format!("impossibile aprire la GPU: {e}"))?;
@@ -147,6 +163,11 @@ impl Gpu {
         self.pipelines.clear();
     }
 
+    /// Libera gli shader degli sfondi che non sono più in uso.
+    pub fn retain_pipelines(&mut self, in_use: &[String]) {
+        self.pipelines.retain(|id, _| in_use.contains(id));
+    }
+
     fn compile(&self, w: &Wallpaper) -> Option<wgpu::RenderPipeline> {
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -206,16 +227,18 @@ impl Gpu {
         })
     }
 
-    pub fn make_target(&self, window: Arc<Window>, surface: wgpu::Surface<'static>) -> Target {
+    pub fn make_target(&self, window: Arc<Window>, surface: wgpu::Surface<'static>, scale: f32) -> Target {
         let size = window.inner_size();
+        let (w, h) = scaled(size.width, size.height, scale);
         let caps = surface.get_capabilities(&self.adapter);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: self.format,
-            width: size.width.max(1),
-            height: size.height.max(1),
+            width: w,
+            height: h,
             present_mode: wgpu::PresentMode::AutoVsync,
-            desired_maximum_frame_latency: 2,
+            // Due buffer invece di tre: a 30 fps non serve altro, e ogni buffer 4K pesa ~33 MB.
+            desired_maximum_frame_latency: 1,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             color_space: wgpu::SurfaceColorSpace::Auto,
@@ -223,12 +246,13 @@ impl Gpu {
         surface.configure(&self.device, &config);
         let uniforms = self.uniform_buffer();
         let bind_group = self.bind_group(&uniforms);
-        Target { window, surface, config, uniforms, bind_group }
+        Target { scale, window, surface, config, uniforms, bind_group }
     }
 
     pub fn resize(&self, t: &mut Target, w: u32, h: u32) {
-        t.config.width = w.max(1);
-        t.config.height = h.max(1);
+        let (w, h) = scaled(w, h, t.scale);
+        t.config.width = w;
+        t.config.height = h;
         t.surface.configure(&self.device, &t.config);
     }
 
@@ -267,7 +291,7 @@ impl Gpu {
     /// Disegna uno sfondo su una texture fuori schermo e restituisce i pixel RGBA.
     /// Usato per esportare immagini statiche (opzione --snapshot).
     pub fn render_offscreen(&mut self, w: &Wallpaper, params: Params) -> Option<Vec<u8>> {
-        let (width, height) = (params.res[0] as u32, params.res[1] as u32);
+        let (width, height) = scaled(params.res[0] as u32, params.res[1] as u32, params.scale);
         let tex = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("offscreen"),
             size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
@@ -321,6 +345,11 @@ impl Gpu {
         }
         Some(out)
     }
+}
+
+/// Dimensione della superficie di disegno: il sistema la ingrandisce da solo alla finestra.
+fn scaled(w: u32, h: u32, scale: f32) -> (u32, u32) {
+    (((w as f32 * scale).round() as u32).max(1), ((h as f32 * scale).round() as u32).max(1))
 }
 
 fn begin_pass<'a>(enc: &'a mut wgpu::CommandEncoder, view: &'a wgpu::TextureView) -> wgpu::RenderPass<'a> {

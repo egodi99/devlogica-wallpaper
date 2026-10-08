@@ -5,7 +5,6 @@ edition = "2021"
 description = "Sfondi animati DevLogica per Windows e macOS, con supporto multimonitor"
 
 [dependencies]
-wgpu = "30"
 winit = "0.30"
 pollster = "0.4"
 bytemuck = { version = "1", features = ["derive"] }
@@ -15,7 +14,9 @@ tray-icon = "0.26"
 image = { version = "0.25", default-features = false, features = ["png"] }
 dirs = "6"
 
+# Un solo backend grafico per sistema: niente Vulkan/OpenGL caricati inutilmente in memoria.
 [target.'cfg(windows)'.dependencies]
+wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "wgsl", "dx12"] }
 windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_UI_WindowsAndMessaging",
@@ -25,6 +26,7 @@ windows = { version = "0.62", features = [
 winreg = "0.55"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "wgsl", "metal"] }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "objc2-core-foundation"] }
 
@@ -34,6 +36,10 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
+
+# Solo per sviluppo su Linux.
+[target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
+wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan"] }
 
 # Icona e informazioni dell'eseguibile Windows (richiede gli strumenti di compilazione Microsoft).
 [target.'cfg(windows)'.build-dependencies]

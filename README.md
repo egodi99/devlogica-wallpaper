@@ -13,6 +13,7 @@ L'app non ha finestre: vive nella **barra di sistema** (Windows) o nella **barra
 - **Sfondi inclusi:** Lame di luce, Barre diagonali, Geometrie, Reticolo.
 - **Sfondi personalizzati:** basta un file `.wgsl` in una cartella, senza ricompilare (vedi sotto).
 - **Fluidità regolabile:** 15 / 24 / 30 / 60 fps.
+- **Risoluzione di rendering regolabile:** Automatica, Piena o Ridotta (vedi *Memoria*).
 - **Logo** attivabile o disattivabile.
 - **Pausa manuale.**
 - **Pausa automatica:**
@@ -130,3 +131,24 @@ Impostazioni e log (`config.json`, `log.txt`) si trovano nella cartella superior
 - **Windows:** la finestra viene agganciata dietro le icone con il metodo usato anche da Lively Wallpaper. È previsto anche il caso di **Windows 11 24H2**, in cui la struttura delle finestre del desktop è cambiata. Il log indica quale metodo è stato usato.
 - **Schermi con scale diverse** (es. MacBook Retina + monitor esterno): nella modalità estesa la scena viene calcolata in pixel fisici. Tra due schermi con densità molto diverse il passaggio può risultare leggermente sfalsato.
 - **Consumi:** la GPU integrata viene preferita a quella dedicata. A 30 fps uno sfondo occupa la GPU per una frazione di millisecondo a fotogramma. Se serve, la fluidità a 15 fps dimezza ancora il lavoro.
+
+## Memoria
+
+Gli accorgimenti per tenere bassa la memoria:
+
+- **Un solo backend grafico per sistema:** DirectX 12 su Windows, Metal su Mac. Vulkan e OpenGL non vengono né compilati né caricati.
+- **Due buffer video per schermo invece di tre.** A 30 fps bastano.
+- **Risoluzione di rendering** (menu → *Risoluzione*). Lo sfondo viene disegnato a una risoluzione più bassa e il sistema lo ingrandisce allo schermo. Su effetti morbidi come questi la differenza quasi non si vede.
+
+| Memoria video per schermo | 1080p | 1440p | 4K |
+|---|---|---|---|
+| Automatica (max 1440 righe) | ~17 MB | ~30 MB | ~30 MB |
+| Piena | ~17 MB | ~30 MB | ~66 MB |
+| Ridotta (metà) | ~4 MB | ~7 MB | ~17 MB |
+
+- **Nessun livello di validazione o debug** nelle build di rilascio, e blocchi di memoria GPU piccoli.
+- **Logo** caricato a 1400 px, più che sufficiente anche su schermi 4K.
+- **Solo gli shader degli sfondi in uso** restano in memoria.
+
+Per misurare i consumi reali, usa sempre una build di rilascio (`cargo build --release`). La build di debug è molto più pesante.
+Su Windows, Gestione attività mostra la memoria della GPU in una colonna separata: nella scheda *Dettagli* aggiungi le colonne relative alla memoria GPU dedicata e condivisa.

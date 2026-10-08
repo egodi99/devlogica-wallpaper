@@ -15,6 +15,28 @@ pub enum Mode {
     Span,
 }
 
+/// Risoluzione a cui si disegna lo sfondo. Meno pixel = meno memoria per i buffer video.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Quality {
+    /// Al massimo 1440 righe: nessuna differenza fino al 1440p, molta meno memoria sui 4K.
+    Auto,
+    /// Risoluzione nativa dello schermo.
+    Full,
+    /// Metà risoluzione: il consumo minimo possibile.
+    Low,
+}
+
+impl Quality {
+    pub fn scale(self, height: u32) -> f32 {
+        match self {
+            Quality::Full => 1.0,
+            Quality::Low => 0.5,
+            Quality::Auto => (1440.0 / height.max(1) as f32).min(1.0),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -24,6 +46,7 @@ pub struct Config {
     /// Sfondo per schermo, indicizzato dalla chiave dello schermo (nome + risoluzione).
     pub per_monitor: HashMap<String, String>,
     pub fps: u32,
+    pub quality: Quality,
     pub show_logo: bool,
     pub paused: bool,
     /// Mette in pausa quando un'applicazione è a schermo intero (solo Windows).
@@ -37,6 +60,7 @@ impl Default for Config {
             wallpaper: "lame".into(),
             per_monitor: HashMap::new(),
             fps: 30,
+            quality: Quality::Auto,
             show_logo: true,
             paused: false,
             pause_on_fullscreen: true,

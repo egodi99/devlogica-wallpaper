@@ -13,7 +13,8 @@ struct Params {
     time: f32,       // secondi, condivisi da tutte le finestre
     since: f32,      // secondi dall'ultimo cambio di sfondo
     logo_on: f32,
-    _p0: f32, _p1: f32, _p2: f32,
+    scale: f32,      // pixel disegnati / pixel della finestra
+    _p1: f32, _p2: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Params;
@@ -81,7 +82,7 @@ fn apply_logo(p: vec2f, col: vec3f) -> vec3f {
 
 @fragment
 fn fs_main(@builtin(position) fc: vec4f) -> @location(0) vec4f {
-    let p = fc.xy + u.offset;
+    let p = fc.xy / u.scale + u.offset;
     var col = scene(p);
     col = apply_logo(p, col);
     // retinatura leggera: elimina le "scalette" nei gradienti scuri
